@@ -2,16 +2,18 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import {
   DashboardLayout,
   StatsCard,
   CallResultChart,
   DailyChart,
   CallList,
+  ZoomStatsCard,
 } from '@/components/dashboard';
+import { UserRanking } from '@/components/dashboard/user-ranking';
 import { PeriodTabs, Period } from '@/components/dashboard/period-tabs';
-import { Phone, Clock, CheckCircle, Timer } from 'lucide-react';
+import { Phone, Clock, CheckCircle, Users } from 'lucide-react';
 import { FullPageLoading } from '@/components/ui/loading-spinner';
 import { CallResult } from '@/types';
 
@@ -25,12 +27,6 @@ interface DashboardData {
     busyCalls: number;
     voicemailCalls: number;
     failedCalls: number;
-  };
-  periodSummary: {
-    totalCalls: number;
-    connectedCalls: number;
-    totalDuration: number;
-    averageDuration: number;
   };
   dailyStats: Array<{
     date: string;
@@ -49,6 +45,19 @@ interface DashboardData {
     duration: number;
     hasRecording: boolean;
   }>;
+  userRanking: Array<{
+    id: string;
+    name: string;
+    email: string;
+    summary: {
+      totalCalls: number;
+      connectedCalls: number;
+      totalDuration: number;
+      averageDuration: number;
+    };
+  }>;
+  activeUsers: number;
+  totalUsers: number;
 }
 
 function formatDuration(seconds: number): string {
@@ -60,19 +69,11 @@ function formatDuration(seconds: number): string {
   return `${mins}分`;
 }
 
-export default function OperatorDashboard() {
+export default function AdminDashboard() {
   const { data: session, status } = useSession();
-  const router = useRouter();
   const [period, setPeriod] = useState<Period>('daily');
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (status === 'loading') return;
-    if (!session) {
-      router.push('/login');
-    }
-  }, [session, status, router]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -100,7 +101,11 @@ export default function OperatorDashboard() {
   }
 
   if (!session) {
-    return null;
+    redirect('/login');
+  }
+
+  if (session.user.role !== 'admin') {
+    redirect('/');
   }
 
   const baseSummary = data?.summary || {
@@ -114,18 +119,11 @@ export default function OperatorDashboard() {
     failedCalls: 0,
   };
 
-  const periodSummary = data?.periodSummary || {
-    totalCalls: 0,
-    connectedCalls: 0,
-    totalDuration: 0,
-    averageDuration: 0,
-  };
-
-  // idleTimeを計算（勤務時間7時間 = 25200秒）- 選択期間のデータを使用
+  // idleTimeを計算（勤務時間7時間 = 25200秒）
   const workSeconds = 7 * 60 * 60;
   const summary = {
     ...baseSummary,
-    idleTime: Math.max(0, workSeconds - periodSummary.totalDuration),
+    idleTime: Math.max(0, workSeconds - baseSummary.totalDuration),
   };
 
   const connectionRate =
@@ -147,8 +145,8 @@ export default function OperatorDashboard() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">マイダッシュボード</h1>
-            <p className="text-gray-600">{periodLabels[period]}の架電実績を確認</p>
+            <h1 className="text-2xl font-bold text-gray-900">管理者ダッシュボード</h1>
+            <p className="text-gray-600">チーム全体の{periodLabels[period]}の架電実績</p>
           </div>
           <PeriodTabs value={period} onChange={setPeriod} />
         </div>
@@ -157,11 +155,11 @@ export default function OperatorDashboard() {
           <StatsCard
             title="総通話数"
             value={summary.totalCalls}
-            subtitle={`${periodLabels[period]}の総発信数`}
+            subtitle="全期間の総発信数"
             icon={Phone}
           />
           <StatsCard
-            title="接続数"
+            title="総接続数"
             value={summary.connectedCalls}
             subtitle={`接続率 ${connectionRate}%`}
             icon={CheckCircle}
@@ -173,10 +171,10 @@ export default function OperatorDashboard() {
             icon={Clock}
           />
           <StatsCard
-            title="アイドル時間"
-            value={formatDuration(summary.idleTime)}
-            subtitle="勤務時間中の待機時間"
-            icon={Timer}
+            title="アクティブユーザー"
+            value={data?.activeUsers || 0}
+            subtitle={`全 ${data?.totalUsers || 0} 名中`}
+            icon={Users}
           />
         </div>
 
@@ -189,7 +187,14 @@ export default function OperatorDashboard() {
           </div>
         </div>
 
-        <CallList calls={data?.recentCalls || []} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <UserRanking users={data?.userRanking || []} />
+          <CallList
+            calls={data?.recentCalls || []}
+            showUser
+          />
+          <ZoomStatsCard />
+        </div>
       </div>
     </DashboardLayout>
   );
