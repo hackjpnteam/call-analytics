@@ -119,7 +119,6 @@ export async function GET(request: NextRequest) {
                   duration: log.duration,
                   result: mapResult(callResult, log.duration),
                   hasRecording: hasRecording,
-                  ...(log.recording_id && { zoomRecordingId: log.recording_id }),
                 }
               },
               { new: true }
@@ -145,7 +144,6 @@ export async function GET(request: NextRequest) {
                     userId: user._id,
                     zoomRecordingId: log.recording_id,
                     duration: log.duration,
-                    recordingType: log.recording_type,
                     mimeType: 'audio/mp3',
                     expiresAt,
                   });
@@ -169,7 +167,6 @@ export async function GET(request: NextRequest) {
                 endTime: log.end_time ? new Date(log.end_time) : undefined,
                 duration: log.duration || 0,
                 hasRecording: hasRecording,
-                zoomRecordingId: log.recording_id,
               });
               callsCreated++;
 
@@ -184,7 +181,6 @@ export async function GET(request: NextRequest) {
                   userId: user._id,
                   zoomRecordingId: log.recording_id,
                   duration: log.duration,
-                  recordingType: log.recording_type,
                   mimeType: 'audio/mp3',
                   expiresAt,
                 });

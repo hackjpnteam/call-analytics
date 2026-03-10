@@ -46,16 +46,17 @@ export async function POST(request: NextRequest) {
     // 通話ログをDBに保存
     for (const log of zoomLogs) {
       // Zoom APIのフィールド名に対応
-      const callId = (log as Record<string, unknown>).call_id || (log as Record<string, unknown>).id;
-      const startTime = (log as Record<string, unknown>).start_time || log.date_time;
-      const callResult = (log as Record<string, unknown>).call_result || log.result;
-      const calleeDid = (log as Record<string, unknown>).callee_did_number || log.callee_number;
-      const callerDid = (log as Record<string, unknown>).caller_did_number || log.caller_number;
-      const recordingStatus = (log as Record<string, unknown>).recording_status;
+      const logAny = log as unknown as Record<string, unknown>;
+      const callId = logAny.call_id || logAny.id;
+      const startTime = logAny.start_time || log.date_time;
+      const callResult = logAny.call_result || log.result;
+      const calleeDid = logAny.callee_did_number || log.callee_number;
+      const callerDid = logAny.caller_did_number || log.caller_number;
+      const recordingStatus = logAny.recording_status;
 
       const existingLog = await CallLog.findOne({
         tenantId: tenant._id,
-        zoomCallId: callId,
+        zoomCallId: String(callId),
       });
 
       if (existingLog) {
@@ -71,9 +72,9 @@ export async function POST(request: NextRequest) {
           await CallLog.create({
             tenantId: tenant._id,
             userId: tenant._id,
-            zoomCallId: callId,
+            zoomCallId: String(callId),
             direction: log.direction,
-            phoneNumber: log.direction === 'outbound' ? calleeDid : callerDid,
+            phoneNumber: log.direction === 'outbound' ? String(calleeDid || '') : String(callerDid || ''),
             callerName: log.caller_name,
             result: mapZoomResultToInternal(String(callResult)),
             startTime: new Date(String(startTime)),
