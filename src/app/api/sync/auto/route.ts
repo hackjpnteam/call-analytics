@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { connectDB } from '@/lib/db/mongodb';
 import { Tenant, CallLog, User } from '@/models';
@@ -8,12 +8,38 @@ import { getZoomAccessToken, ZoomApiConfig } from '@/lib/zoom-phone';
 const syncCache = new Map<string, number>();
 const SYNC_INTERVAL = 5 * 60 * 1000; // 5分
 
-async function getUserCallLogs(token: string, userId: string, from: string, to: string): Promise<unknown[]> {
-  const allLogs: unknown[] = [];
+interface ZoomCallLog {
+  id?: string;
+  call_id?: string;
+  date_time?: string;
+  start_time?: string;
+  end_time?: string;
+  duration?: number;
+  direction?: string;
+  result?: string;
+  call_result?: string;
+  caller_number?: string;
+  caller_did_number?: string;
+  caller_name?: string;
+  callee_number?: string;
+  callee_did_number?: string;
+  callee_name?: string;
+  recording_id?: string;
+  recording_status?: string;
+  has_recording?: boolean;
+  owner?: {
+    id?: string;
+    name?: string;
+    type?: string;
+  };
+}
+
+async function getAccountCallLogs(token: string, from: string, to: string): Promise<ZoomCallLog[]> {
+  const allLogs: ZoomCallLog[] = [];
   let nextPageToken: string | undefined;
 
   do {
-    const url = new URL(`https://api.zoom.us/v2/phone/users/${userId}/call_logs`);
+    const url = new URL('https://api.zoom.us/v2/phone/call_logs');
     url.searchParams.set('from', from);
     url.searchParams.set('to', to);
     url.searchParams.set('page_size', '300');
@@ -24,8 +50,8 @@ async function getUserCallLogs(token: string, userId: string, from: string, to: 
     });
 
     if (!response.ok) {
-      if (response.status === 404 || response.status === 400) return [];
-      return [];
+      console.error('Zoom API error:', response.status, await response.text());
+      break;
     }
 
     const data = await response.json();
@@ -51,7 +77,7 @@ function mapResult(zoomResult: string, duration?: number): string {
 }
 
 // ページ読み込み時に自動同期
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     const session = await auth();
     if (!session?.user) {
@@ -92,58 +118,73 @@ export async function POST(request: NextRequest) {
 
     const token = await getZoomAccessToken(config);
 
-    // ZoomユーザーIDを持つユーザーを取得
+    // ZoomユーザーIDからDBユーザーIDへのマップを作成
     const users = await User.find({
       tenantId: tenant._id,
       zoomUserId: { $exists: true, $ne: null }
     }).lean();
 
+    const zoomUserMap = new Map<string, string>();
+    for (const user of users) {
+      if (user.zoomUserId) {
+        zoomUserMap.set(user.zoomUserId, user._id.toString());
+      }
+    }
+
+    // アカウント全体の通話ログを取得
+    const logs = await getAccountCallLogs(token, fromDate, toDate);
+
     let created = 0;
     let updated = 0;
+    let skipped = 0;
 
-    for (const user of users) {
-      const logs = await getUserCallLogs(token, user.zoomUserId!, fromDate, toDate);
+    for (const log of logs) {
+      const zoomCallId = String(log.call_id || log.id);
+      const startTime = log.start_time || log.date_time;
+      const callResult = String(log.call_result || log.result || '');
+      const hasRecording = !!(log.recording_id || log.recording_status === 'recorded' || log.has_recording);
 
-      for (const log of logs) {
-        const logAny = log as Record<string, unknown>;
-        const zoomCallId = String(logAny.call_id || logAny.id);
-        const startTime = logAny.start_time || logAny.date_time;
-        const callResult = String(logAny.call_result || logAny.result || '');
-        const hasRecording = !!(logAny.recording_id || logAny.recording_status === 'recorded' || logAny.has_recording);
+      // オーナーからユーザーIDを取得
+      const ownerZoomId = log.owner?.id;
+      const userId = ownerZoomId ? zoomUserMap.get(ownerZoomId) : null;
 
-        const existing = await CallLog.findOneAndUpdate(
-          { tenantId: tenant._id, zoomCallId },
-          {
-            $set: {
-              duration: logAny.duration,
-              result: mapResult(callResult, logAny.duration as number),
-              hasRecording,
-            }
-          },
-          { new: true }
-        );
+      if (!userId) {
+        skipped++;
+        continue;
+      }
 
-        if (existing) {
-          updated++;
-        } else {
-          const direction = String(logAny.direction || 'outbound');
-          await CallLog.create({
-            tenantId: tenant._id,
-            userId: user._id,
-            zoomCallId,
-            direction: direction as 'inbound' | 'outbound',
-            phoneNumber: direction === 'outbound'
-              ? String(logAny.callee_did_number || logAny.callee_number || '')
-              : String(logAny.caller_did_number || logAny.caller_number || ''),
-            callerName: String(logAny.caller_name || logAny.callee_name || ''),
-            result: mapResult(callResult, logAny.duration as number),
-            startTime: new Date(String(startTime)),
-            endTime: logAny.end_time ? new Date(String(logAny.end_time)) : undefined,
-            duration: Number(logAny.duration) || 0,
+      const existing = await CallLog.findOneAndUpdate(
+        { tenantId: tenant._id, zoomCallId },
+        {
+          $set: {
+            duration: log.duration,
+            result: mapResult(callResult, log.duration),
             hasRecording,
-          });
-          created++;
-        }
+          }
+        },
+        { new: true }
+      );
+
+      if (existing) {
+        updated++;
+      } else {
+        const direction = String(log.direction || 'outbound');
+        await CallLog.create({
+          tenantId: tenant._id,
+          userId,
+          zoomCallId,
+          direction: direction as 'inbound' | 'outbound',
+          phoneNumber: direction === 'outbound'
+            ? String(log.callee_did_number || log.callee_number || '')
+            : String(log.caller_did_number || log.caller_number || ''),
+          callerName: String(log.caller_name || log.callee_name || ''),
+          result: mapResult(callResult, log.duration),
+          startTime: new Date(String(startTime)),
+          endTime: log.end_time ? new Date(String(log.end_time)) : undefined,
+          duration: Number(log.duration) || 0,
+          hasRecording,
+        });
+        created++;
       }
     }
 
@@ -153,8 +194,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       skipped: false,
-      message: `同期完了: ${created}件作成, ${updated}件更新`,
-      stats: { created, updated },
+      message: `同期完了: ${created}件作成, ${updated}件更新, ${skipped}件スキップ`,
+      stats: { created, updated, skipped, total: logs.length },
     });
   } catch (error) {
     console.error('Auto sync error:', error);
