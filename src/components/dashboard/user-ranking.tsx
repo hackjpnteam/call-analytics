@@ -104,18 +104,27 @@ function getSortValue(criteria: RankingCriteria, user: UserWithSummary): number 
 export function UserRanking({ users }: UserRankingProps) {
   const [criteria, setCriteria] = useState<RankingCriteria>('totalCalls');
 
+  // 0件のユーザーを除外してソート
   const sortedUsers = useMemo(() => {
-    return [...users].sort((a, b) => getSortValue(criteria, b) - getSortValue(criteria, a));
+    const activeUsers = users.filter(u => u.summary.totalCalls > 0);
+    return activeUsers.sort((a, b) => {
+      const valueA = getSortValue(criteria, a);
+      const valueB = getSortValue(criteria, b);
+      if (valueA === 0 && valueB === 0) return a.name.localeCompare(b.name);
+      if (valueA === 0) return 1;
+      if (valueB === 0) return -1;
+      return valueB - valueA;
+    });
   }, [users, criteria]);
 
-  if (users.length === 0) {
+  if (sortedUsers.length === 0) {
     return (
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">オペレーターランキング</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-center text-gray-500 py-8">データがありません</p>
+          <p className="text-center text-gray-500 py-8">この期間の通話データがありません</p>
         </CardContent>
       </Card>
     );

@@ -161,17 +161,17 @@ export default function AdminDashboard() {
           <StatsCard
             title="総通話数"
             value={summary.totalCalls}
-            subtitle="全期間の総発信数"
+            subtitle={`${periodLabels[period]}の発信数`}
             icon={Phone}
           />
           <StatsCard
-            title="総接続数"
+            title="接続数"
             value={summary.connectedCalls}
             subtitle={`接続率 ${connectionRate}%`}
             icon={CheckCircle}
           />
           <StatsCard
-            title="総通話時間"
+            title="通話時間"
             value={formatDuration(summary.totalDuration)}
             subtitle={`平均 ${formatDuration(summary.averageDuration)}`}
             icon={Clock}
