@@ -44,6 +44,7 @@ import { CallResult } from '@/types';
 
 interface CallData {
   id: string;
+  zoomCallId?: string;
   userId: string;
   userName: string;
   direction: 'inbound' | 'outbound';
@@ -118,6 +119,8 @@ export default function CallsPage() {
   };
 
   // Play recording
+  const [loadingRecording, setLoadingRecording] = useState<string | null>(null);
+
   const handlePlayRecording = async (callId: string, recordingId?: string) => {
     if (playingId === callId) {
       // Stop playing
@@ -126,10 +129,18 @@ export default function CallsPage() {
       return;
     }
 
-    if (!recordingId) return;
+    setLoadingRecording(callId);
 
     try {
-      const res = await fetch(`/api/recordings/${recordingId}`, { method: 'POST' });
+      let res;
+      if (recordingId) {
+        // 既存のrecordingIdがある場合
+        res = await fetch(`/api/recordings/${recordingId}`, { method: 'POST' });
+      } else {
+        // recordingIdがない場合は通話IDから取得
+        res = await fetch(`/api/recordings/by-call/${callId}`, { method: 'POST' });
+      }
+
       if (res.ok) {
         const data = await res.json();
         if (data.streamUrl) {
@@ -140,9 +151,16 @@ export default function CallsPage() {
           setAudioRef(audio);
           setPlayingId(callId);
         }
+      } else {
+        const error = await res.json();
+        console.error('Recording error:', error);
+        alert(error.error || '録音を再生できません');
       }
     } catch (err) {
       console.error('Failed to play recording:', err);
+      alert('録音の取得に失敗しました');
+    } finally {
+      setLoadingRecording(null);
     }
   };
 
@@ -398,21 +416,22 @@ export default function CallsPage() {
                           {formatDuration(call.duration)}
                         </TableCell>
                         <TableCell>
-                          {call.hasRecording && call.recordingId ? (
+                          {call.hasRecording ? (
                             <Button
                               variant="outline"
                               size="sm"
                               className="h-8 px-3 bg-blue-50 hover:bg-blue-100 border-blue-200"
                               onClick={() => handlePlayRecording(call.id, call.recordingId)}
+                              disabled={loadingRecording === call.id}
                             >
-                              {playingId === call.id ? (
+                              {loadingRecording === call.id ? (
+                                <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
+                              ) : playingId === call.id ? (
                                 <Pause className="h-4 w-4 text-blue-600" />
                               ) : (
                                 <Play className="h-4 w-4 text-blue-600" />
                               )}
                             </Button>
-                          ) : call.hasRecording ? (
-                            <span className="text-xs text-gray-400">-</span>
                           ) : null}
                         </TableCell>
                       </TableRow>

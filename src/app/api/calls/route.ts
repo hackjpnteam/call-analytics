@@ -79,6 +79,7 @@ export async function GET(request: NextRequest) {
 
     const callsWithUser = calls.map(call => ({
       id: call._id.toString(),
+      zoomCallId: call.zoomCallId,
       userId: call.userId.toString(),
       userName: userMap.get(call.userId.toString()) || '不明',
       direction: call.direction,
