@@ -28,6 +28,7 @@ import {
   Users,
 } from 'lucide-react';
 import { FullPageLoading } from '@/components/ui/loading-spinner';
+import { useAutoSync } from '@/hooks/useAutoSync';
 
 interface UserRankingData {
   id: string;
@@ -151,6 +152,9 @@ export default function RankingPage() {
   const [users, setUsers] = useState<UserRankingData[]>([]);
   const [activeUsers, setActiveUsers] = useState<UserRankingData[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // ページ読み込み時に自動同期
+  useAutoSync();
 
   useEffect(() => {
     if (status === 'loading') return;

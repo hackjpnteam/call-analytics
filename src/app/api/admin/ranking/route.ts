@@ -126,24 +126,14 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // ソート（0件のユーザーは下位に配置）
-    allUsers.sort((a, b) => {
-      // 両方0件の場合は名前順
-      if (a.summary.totalCalls === 0 && b.summary.totalCalls === 0) {
-        return a.name.localeCompare(b.name);
-      }
-      // 0件のユーザーは最後尾
-      if (a.summary.totalCalls === 0) return 1;
-      if (b.summary.totalCalls === 0) return -1;
-      // 通常のソート
-      return b.summary.totalCalls - a.summary.totalCalls;
-    });
+    // アクティブユーザー（通話実績があるユーザー）のみ抽出してソート
+    const activeUsers = allUsers
+      .filter(u => u.summary.totalCalls > 0)
+      .sort((a, b) => b.summary.totalCalls - a.summary.totalCalls);
 
-    // アクティブユーザー（通話実績があるユーザー）のみ抽出
-    const activeUsers = allUsers.filter(u => u.summary.totalCalls > 0);
-
+    // 0件ユーザーは返さない（フロントで混乱を招くため）
     return NextResponse.json({
-      users: allUsers,
+      users: activeUsers,
       activeUsers: activeUsers,
       period,
       totalUsers: users.length,

@@ -16,6 +16,7 @@ import { PeriodTabs, Period } from '@/components/dashboard/period-tabs';
 import { Phone, Clock, CheckCircle, Users } from 'lucide-react';
 import { FullPageLoading } from '@/components/ui/loading-spinner';
 import { CallResult } from '@/types';
+import { useAutoSync } from '@/hooks/useAutoSync';
 
 interface DashboardData {
   summary: {
@@ -74,6 +75,9 @@ export default function AdminDashboard() {
   const [period, setPeriod] = useState<Period>('daily');
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // ページ読み込み時に自動同期
+  useAutoSync();
 
   useEffect(() => {
     const fetchData = async () => {

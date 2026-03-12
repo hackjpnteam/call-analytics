@@ -172,10 +172,15 @@ export async function GET(request: NextRequest) {
         };
       });
 
+      // 0件ユーザーを除外してソート
       userRanking = userStats
+        .filter(u => u.summary.totalCalls > 0)
         .sort((a, b) => b.summary.totalCalls - a.summary.totalCalls)
         .slice(0, 10);
     }
+
+    // アクティブユーザー数を正確に計算
+    const activeUserCount = userRanking.length;
 
     return NextResponse.json({
       summary,
@@ -183,7 +188,7 @@ export async function GET(request: NextRequest) {
       dailyStats,
       recentCalls: recentCallsWithUser,
       userRanking,
-      activeUsers: users.length,
+      activeUsers: activeUserCount,
       totalUsers: users.length,
     });
   } catch (error) {
