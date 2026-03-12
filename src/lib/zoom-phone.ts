@@ -214,24 +214,21 @@ export async function getRecordings(
  */
 export async function downloadRecording(
   config: ZoomApiConfig,
-  recordingId: string,
-  callLogId?: string
+  recordingId: string
 ): Promise<{ downloadUrl: string; token: string }> {
   const token = await getZoomAccessToken(config);
 
-  // callLogIdがある場合は直接取得を試みる
-  if (callLogId) {
-    try {
-      const recording = await zoomApiRequest<ZoomRecording>(
-        config,
-        `/phone/call_logs/${callLogId}/recordings/${recordingId}`
-      );
-      if (recording?.download_url) {
-        return { downloadUrl: recording.download_url, token };
-      }
-    } catch {
-      // 直接取得に失敗した場合は一覧から検索
+  // recordingIdから直接取得を試みる
+  try {
+    const recording = await zoomApiRequest<ZoomRecording>(
+      config,
+      `/phone/recordings/${recordingId}`
+    );
+    if (recording?.download_url) {
+      return { downloadUrl: recording.download_url, token };
     }
+  } catch {
+    // 直接取得に失敗した場合は一覧から検索
   }
 
   // 録音一覧から該当録音を検索

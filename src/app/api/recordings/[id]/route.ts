@@ -73,18 +73,9 @@ export async function POST(
         clientSecret: tenant.zoomPhoneConfig.clientSecret!,
       };
 
-      // callLogIdからzoomCallIdを取得
-      let zoomCallId: string | undefined;
-      if (recording.callLogId) {
-        const CallLog = (await import('@/models/CallLog')).default;
-        const callLog = await CallLog.findById(recording.callLogId);
-        zoomCallId = callLog?.zoomCallId;
-      }
-
       const { downloadUrl, token } = await downloadRecording(
         config,
-        recording.zoomRecordingId,
-        zoomCallId
+        recording.zoomRecordingId
       );
 
       // トークン付きURLを返す
