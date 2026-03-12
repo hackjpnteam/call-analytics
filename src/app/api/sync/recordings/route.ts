@@ -53,13 +53,26 @@ export async function POST(request: NextRequest) {
 
     let created = 0;
     let skipped = 0;
+    let linked = 0;
+
+    console.log(`Recording sync: Found ${allRecordings.length} recordings from Zoom API`);
 
     // 録音をDBに保存
     for (const rec of allRecordings) {
+      // Zoom APIのフィールド名対応
+      const recAny = rec as unknown as Record<string, unknown>;
+      const recordingId = recAny.id || recAny.recording_id;
+      const callId = recAny.call_id || recAny.call_log_id;
+
+      if (!recordingId) {
+        skipped++;
+        continue;
+      }
+
       // 既存チェック
       const exists = await Recording.findOne({
         tenantId: tenant._id,
-        zoomRecordingId: rec.id,
+        zoomRecordingId: String(recordingId),
       });
 
       if (exists) {
@@ -67,10 +80,13 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // 対応する通話ログを探す
+      // 対応する通話ログを探す（複数のフィールドでマッチング）
       const callLog = await CallLog.findOne({
         tenantId: tenant._id,
-        zoomCallId: rec.call_id,
+        $or: [
+          { zoomCallId: String(callId) },
+          { zoomCallId: recAny.call_log_id },
+        ],
       });
 
       // 保管期限を計算
@@ -79,14 +95,18 @@ export async function POST(request: NextRequest) {
       expiresAt.setDate(expiresAt.getDate() + retentionDays);
 
       try {
+        const downloadUrl = recAny.download_url || recAny.file_url || '';
+        const duration = recAny.duration || recAny.recording_duration || 0;
+        const fileSize = recAny.file_size || recAny.recording_file_size;
+
         const recording = await Recording.create({
           tenantId: tenant._id,
           callLogId: callLog?._id,
           userId: callLog?.userId || tenant._id,
-          zoomRecordingId: rec.id,
-          duration: rec.duration,
-          fileSize: rec.file_size,
-          zoomDownloadUrl: rec.download_url,
+          zoomRecordingId: String(recordingId),
+          duration: Number(duration),
+          fileSize: fileSize ? Number(fileSize) : undefined,
+          zoomDownloadUrl: String(downloadUrl),
           mimeType: 'audio/mp3',
           isTranscribed: false,
           expiresAt,
@@ -97,6 +117,7 @@ export async function POST(request: NextRequest) {
           callLog.recordingId = recording._id;
           callLog.hasRecording = true;
           await callLog.save();
+          linked++;
         }
 
         created++;
@@ -108,8 +129,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `録音同期完了: ${created}件作成, ${skipped}件スキップ`,
-      stats: { created, skipped, total: allRecordings.length },
+      message: `録音同期完了: ${created}件作成, ${linked}件紐付け, ${skipped}件スキップ`,
+      stats: { created, linked, skipped, total: allRecordings.length },
     });
   } catch (error) {
     console.error('Recording sync error:', error);
