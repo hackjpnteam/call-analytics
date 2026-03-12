@@ -80,14 +80,22 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // 対応する通話ログを探す（複数のフィールドでマッチング）
-      const callLog = await CallLog.findOne({
+      // 対応する通話ログを探す
+      const callIdStr = String(callId || '');
+      const callLogIdStr = String(recAny.call_log_id || '');
+
+      let callLog = await CallLog.findOne({
         tenantId: tenant._id,
-        $or: [
-          { zoomCallId: String(callId) },
-          { zoomCallId: recAny.call_log_id },
-        ],
+        zoomCallId: callIdStr,
       });
+
+      // call_idで見つからない場合はcall_log_idで検索
+      if (!callLog && callLogIdStr && callLogIdStr !== callIdStr) {
+        callLog = await CallLog.findOne({
+          tenantId: tenant._id,
+          zoomCallId: callLogIdStr,
+        });
+      }
 
       // 保管期限を計算
       const retentionDays = tenant.settings?.recordingRetentionDays || 180;
