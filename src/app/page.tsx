@@ -121,8 +121,14 @@ export default function OperatorDashboard() {
     averageDuration: 0,
   };
 
-  // idleTimeを計算（勤務時間7時間 = 25200秒）- 選択期間のデータを使用
-  const workSeconds = 7 * 60 * 60;
+  // idleTimeを計算（期間に応じた勤務時間）- 選択期間のデータを使用
+  const workHoursPerDay = 7;
+  const workDays = {
+    daily: 1,
+    weekly: 5,
+    monthly: 22,
+  };
+  const workSeconds = workHoursPerDay * 60 * 60 * workDays[period];
   const summary = {
     ...baseSummary,
     idleTime: Math.max(0, workSeconds - periodSummary.totalDuration),

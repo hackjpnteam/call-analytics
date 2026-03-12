@@ -119,8 +119,14 @@ export default function AdminDashboard() {
     failedCalls: 0,
   };
 
-  // idleTimeを計算（勤務時間7時間 = 25200秒）
-  const workSeconds = 7 * 60 * 60;
+  // idleTimeを計算（期間に応じた勤務時間）
+  const workHoursPerDay = 7;
+  const workDays = {
+    daily: 1,
+    weekly: 5,
+    monthly: 22,
+  };
+  const workSeconds = workHoursPerDay * 60 * 60 * workDays[period];
   const summary = {
     ...baseSummary,
     idleTime: Math.max(0, workSeconds - baseSummary.totalDuration),

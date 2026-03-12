@@ -48,60 +48,49 @@ export async function GET(request: NextRequest) {
       query.userId = userId || session.user.id;
     }
 
-    // 期間内の通話（日別チャート用）
+    // 期間内の通話
     const calls = await CallLog.find(query).lean();
-
-    // 全期間の通話（サマリー用）
-    const allCallsQuery: Record<string, unknown> = { tenantId };
-    if (userId || !isAdmin) {
-      allCallsQuery.userId = userId || session.user.id;
-    }
-    const allCalls = await CallLog.find(allCallsQuery).lean();
 
     // デバッグログ
     console.log('Dashboard stats debug:', {
       tenantId,
       isAdmin,
-      allCallsCount: allCalls.length,
-      usersCount: (await User.find({ tenantId }).lean()).length,
+      period,
+      callsCount: calls.length,
     });
 
-    // 全期間のサマリー
+    // 選択期間のサマリー（メイン表示用）
+    const connectedCalls = calls.filter(c => c.result === 'connected');
     const summary = {
-      totalCalls: allCalls.length,
-      connectedCalls: allCalls.filter(c => c.result === 'connected').length,
-      totalDuration: allCalls.reduce((sum, c) => sum + (c.duration || 0), 0),
-      averageDuration: 0,
-      noAnswerCalls: allCalls.filter(c => c.result === 'no_answer').length,
-      busyCalls: allCalls.filter(c => c.result === 'busy').length,
-      voicemailCalls: allCalls.filter(c => c.result === 'voicemail').length,
-      failedCalls: allCalls.filter(c => c.result === 'failed').length,
-    };
-
-    const connectedCalls = allCalls.filter(c => c.result === 'connected');
-    summary.averageDuration = connectedCalls.length > 0
-      ? Math.round(connectedCalls.reduce((sum, c) => sum + (c.duration || 0), 0) / connectedCalls.length)
-      : 0;
-
-    // 選択期間のサマリー（アイドル時間計算用）
-    const periodConnected = calls.filter(c => c.result === 'connected');
-    const periodSummary = {
       totalCalls: calls.length,
-      connectedCalls: periodConnected.length,
+      connectedCalls: connectedCalls.length,
       totalDuration: calls.reduce((sum, c) => sum + (c.duration || 0), 0),
-      averageDuration: periodConnected.length > 0
-        ? Math.round(periodConnected.reduce((sum, c) => sum + (c.duration || 0), 0) / periodConnected.length)
+      averageDuration: connectedCalls.length > 0
+        ? Math.round(connectedCalls.reduce((sum, c) => sum + (c.duration || 0), 0) / connectedCalls.length)
         : 0,
+      noAnswerCalls: calls.filter(c => c.result === 'no_answer').length,
+      busyCalls: calls.filter(c => c.result === 'busy').length,
+      voicemailCalls: calls.filter(c => c.result === 'voicemail').length,
+      failedCalls: calls.filter(c => c.result === 'failed').length,
     };
 
-    // 日別データ（過去30日）- 全期間のデータを使用
+    // periodSummaryは同じ値（互換性のため維持）
+    const periodSummary = {
+      totalCalls: summary.totalCalls,
+      connectedCalls: summary.connectedCalls,
+      totalDuration: summary.totalDuration,
+      averageDuration: summary.averageDuration,
+    };
+
+    // 日別データ（期間に応じて）
     const dailyStats = [];
-    for (let i = 29; i >= 0; i--) {
+    const daysToShow = period === 'daily' ? 1 : period === 'weekly' ? 7 : 30;
+    for (let i = daysToShow - 1; i >= 0; i--) {
       const date = new Date(now);
       date.setDate(date.getDate() - i);
       const dateStr = date.toISOString().split('T')[0];
 
-      const dayCalls = allCalls.filter(call => {
+      const dayCalls = calls.filter(call => {
         const callDate = new Date(call.startTime).toISOString().split('T')[0];
         return callDate === dateStr;
       });
@@ -114,8 +103,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 最近の通話
-    const recentCalls = await CallLog.find(query)
+    // 最近の通話（期間フィルターなし）
+    const recentCallsQuery: Record<string, unknown> = { tenantId };
+    if (userId || !isAdmin) {
+      recentCallsQuery.userId = userId || session.user.id;
+    }
+    const recentCalls = await CallLog.find(recentCallsQuery)
       .sort({ startTime: -1 })
       .limit(15)
       .lean();

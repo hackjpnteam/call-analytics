@@ -41,6 +41,14 @@ interface UserRankingData {
   };
 }
 
+interface RankingResponse {
+  users: UserRankingData[];
+  activeUsers: UserRankingData[];
+  period: string;
+  totalUsers: number;
+  activeUserCount: number;
+}
+
 type RankingCriteria = 'totalCalls' | 'connectedCalls' | 'connectionRate' | 'totalDuration' | 'averageDuration';
 
 const criteriaConfig: Record<RankingCriteria, { label: string; icon: React.ReactNode; description: string }> = {
@@ -141,6 +149,7 @@ export default function RankingPage() {
   const [period, setPeriod] = useState<Period>('daily');
   const [criteria, setCriteria] = useState<RankingCriteria>('totalCalls');
   const [users, setUsers] = useState<UserRankingData[]>([]);
+  const [activeUsers, setActiveUsers] = useState<UserRankingData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -162,8 +171,9 @@ export default function RankingPage() {
       try {
         const res = await fetch(`/api/admin/ranking?period=${period}`);
         if (res.ok) {
-          const data = await res.json();
+          const data: RankingResponse = await res.json();
           setUsers(data.users);
+          setActiveUsers(data.activeUsers || data.users.filter(u => u.summary.totalCalls > 0));
         }
       } catch (error) {
         console.error('Failed to fetch ranking:', error);
@@ -175,9 +185,29 @@ export default function RankingPage() {
     fetchData();
   }, [session, period]);
 
+  // ソート（0件のユーザーは下位に配置）
   const sortedUsers = useMemo(() => {
-    return [...users].sort((a, b) => getSortValue(criteria, b) - getSortValue(criteria, a));
+    return [...users].sort((a, b) => {
+      const valueA = getSortValue(criteria, a);
+      const valueB = getSortValue(criteria, b);
+      // 両方0件の場合は名前順
+      if (valueA === 0 && valueB === 0) {
+        return a.name.localeCompare(b.name);
+      }
+      // 0件のユーザーは最後尾
+      if (valueA === 0) return 1;
+      if (valueB === 0) return -1;
+      // 通常のソート（降順）
+      return valueB - valueA;
+    });
   }, [users, criteria]);
+
+  // アクティブユーザーのみ（トップ3表示用）
+  const sortedActiveUsers = useMemo(() => {
+    return [...activeUsers].sort((a, b) => {
+      return getSortValue(criteria, b) - getSortValue(criteria, a);
+    });
+  }, [activeUsers, criteria]);
 
   if (status === 'loading' || loading) {
     return <FullPageLoading />;
@@ -193,9 +223,8 @@ export default function RankingPage() {
     monthly: '今月',
   };
 
-  // トップ3を取得
-  const top3 = sortedUsers.slice(0, 3);
-  const restUsers = sortedUsers.slice(3);
+  // トップ3を取得（通話実績があるユーザーのみ）
+  const top3 = sortedActiveUsers.slice(0, 3);
 
   return (
     <DashboardLayout
@@ -242,18 +271,19 @@ export default function RankingPage() {
           </div>
         </Tabs>
 
-        {users.length === 0 ? (
+        {sortedActiveUsers.length === 0 ? (
           <Card>
             <CardContent className="py-12">
               <div className="text-center text-gray-500">
                 <Users className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                <p>ランキングデータがありません</p>
+                <p>この期間の通話データがありません</p>
+                <p className="text-sm mt-2">日次・週次・月次を切り替えて確認してください</p>
               </div>
             </CardContent>
           </Card>
         ) : (
           <>
-            {/* トップ3カード */}
+            {/* トップ3カード（通話実績があるユーザーのみ） */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {top3.map((user, index) => (
                 <Card key={user.id} className={index === 0 ? 'border-yellow-400 border-2' : ''}>

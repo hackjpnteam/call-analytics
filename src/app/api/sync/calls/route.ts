@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db/mongodb';
-import { CallLog, Tenant } from '@/models';
+import { CallLog, Tenant, User } from '@/models';
 import { getAllCallLogs, mapZoomResultToInternal, ZoomApiConfig } from '@/lib/zoom-phone';
 
 export async function POST(request: NextRequest) {
@@ -39,6 +39,13 @@ export async function POST(request: NextRequest) {
     // Zoom APIから通話ログを取得
     const zoomLogs = await getAllCallLogs(config, fromDate, toDate);
 
+    // ユーザーマッピング用にテナントのユーザーを取得
+    const users = await User.find({ tenantId: tenant._id }).lean();
+    const userEmailMap = new Map(users.map(u => [u.email.toLowerCase(), u._id]));
+    const userZoomIdMap = new Map(
+      users.filter(u => u.zoomUserId).map(u => [u.zoomUserId, u._id])
+    );
+
     let created = 0;
     let updated = 0;
     let skipped = 0;
@@ -53,6 +60,33 @@ export async function POST(request: NextRequest) {
       const calleeDid = logAny.callee_did_number || log.callee_number;
       const callerDid = logAny.caller_did_number || log.caller_number;
       const recordingStatus = logAny.recording_status;
+      const userEmail = log.user_email?.toLowerCase();
+      const zoomUserId = log.user_id;
+
+      // ユーザーIDを特定（メールまたはZoom User IDでマッチング）
+      let userId = userEmailMap.get(userEmail) || userZoomIdMap.get(zoomUserId);
+
+      // ユーザーが見つからない場合は新規作成を試みる
+      if (!userId && userEmail) {
+        const existingUser = await User.findOne({
+          tenantId: tenant._id,
+          email: { $regex: new RegExp(`^${userEmail}$`, 'i') }
+        });
+        if (existingUser) {
+          userId = existingUser._id;
+          // ZoomUserIdを更新
+          if (zoomUserId && !existingUser.zoomUserId) {
+            existingUser.zoomUserId = zoomUserId;
+            await existingUser.save();
+          }
+        }
+      }
+
+      // ユーザーが見つからない場合はスキップ
+      if (!userId) {
+        skipped++;
+        continue;
+      }
 
       const existingLog = await CallLog.findOne({
         tenantId: tenant._id,
@@ -64,6 +98,7 @@ export async function POST(request: NextRequest) {
         existingLog.duration = log.duration;
         existingLog.result = mapZoomResultToInternal(String(callResult));
         existingLog.hasRecording = recordingStatus === 'recorded' || log.has_recording;
+        existingLog.userId = userId; // ユーザーIDも更新
         await existingLog.save();
         updated++;
       } else {
@@ -71,7 +106,7 @@ export async function POST(request: NextRequest) {
         try {
           await CallLog.create({
             tenantId: tenant._id,
-            userId: tenant._id,
+            userId: userId,
             zoomCallId: String(callId),
             direction: log.direction,
             phoneNumber: log.direction === 'outbound' ? String(calleeDid || '') : String(callerDid || ''),

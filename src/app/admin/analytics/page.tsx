@@ -30,6 +30,9 @@ import {
   Target,
 } from 'lucide-react';
 import { FullPageLoading } from '@/components/ui/loading-spinner';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+type RankingCategory = 'totalCalls' | 'connectedCalls' | 'connectionRate' | 'avgDuration' | 'totalDuration';
 
 interface AnalyticsData {
   hourlyStats: Array<{ hour: string; totalCalls: number; connectedCalls: number }>;
@@ -59,6 +62,7 @@ export default function AnalyticsPage() {
   const [period, setPeriod] = useState<Period>('daily');
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [rankingCategory, setRankingCategory] = useState<RankingCategory>('totalCalls');
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -115,6 +119,19 @@ export default function AnalyticsPage() {
   };
 
   const hasData = totalSummary.totalCalls > 0;
+
+  // ランキングカテゴリーに応じてソート
+  const rankingCategoryLabels: Record<RankingCategory, string> = {
+    totalCalls: '総通話数',
+    connectedCalls: '接続数',
+    connectionRate: '接続率',
+    avgDuration: '平均通話時間',
+    totalDuration: '総通話時間',
+  };
+
+  const sortedUserPerformance = [...userPerformance].sort((a, b) => {
+    return b[rankingCategory] - a[rankingCategory];
+  });
 
   return (
     <DashboardLayout
@@ -322,13 +339,24 @@ export default function AnalyticsPage() {
             {/* ユーザー別パフォーマンス */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Users className="h-5 w-5" />
-                  ユーザー別パフォーマンス
-                </CardTitle>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    ユーザー別パフォーマンス
+                  </CardTitle>
+                  <Tabs value={rankingCategory} onValueChange={(v) => setRankingCategory(v as RankingCategory)}>
+                    <TabsList className="grid grid-cols-5 w-full sm:w-auto">
+                      <TabsTrigger value="totalCalls" className="text-xs px-2">通話数</TabsTrigger>
+                      <TabsTrigger value="connectedCalls" className="text-xs px-2">接続数</TabsTrigger>
+                      <TabsTrigger value="connectionRate" className="text-xs px-2">接続率</TabsTrigger>
+                      <TabsTrigger value="avgDuration" className="text-xs px-2">平均時間</TabsTrigger>
+                      <TabsTrigger value="totalDuration" className="text-xs px-2">総時間</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
               </CardHeader>
               <CardContent>
-                {userPerformance.length === 0 ? (
+                {sortedUserPerformance.length === 0 ? (
                   <p className="text-center text-gray-500 py-8">データがありません</p>
                 ) : (
                   <div className="overflow-x-auto">
@@ -337,15 +365,15 @@ export default function AnalyticsPage() {
                         <tr className="border-b">
                           <th className="text-left py-3 px-4">順位</th>
                           <th className="text-left py-3 px-4">担当者</th>
-                          <th className="text-right py-3 px-4">総通話数</th>
-                          <th className="text-right py-3 px-4">接続数</th>
-                          <th className="text-right py-3 px-4">接続率</th>
-                          <th className="text-right py-3 px-4">平均通話時間</th>
-                          <th className="text-right py-3 px-4">総通話時間</th>
+                          <th className={`text-right py-3 px-4 ${rankingCategory === 'totalCalls' ? 'bg-blue-50 text-blue-700' : ''}`}>総通話数</th>
+                          <th className={`text-right py-3 px-4 ${rankingCategory === 'connectedCalls' ? 'bg-blue-50 text-blue-700' : ''}`}>接続数</th>
+                          <th className={`text-right py-3 px-4 ${rankingCategory === 'connectionRate' ? 'bg-blue-50 text-blue-700' : ''}`}>接続率</th>
+                          <th className={`text-right py-3 px-4 ${rankingCategory === 'avgDuration' ? 'bg-blue-50 text-blue-700' : ''}`}>平均通話時間</th>
+                          <th className={`text-right py-3 px-4 ${rankingCategory === 'totalDuration' ? 'bg-blue-50 text-blue-700' : ''}`}>総通話時間</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {userPerformance.map((user, index) => (
+                        {sortedUserPerformance.map((user, index) => (
                           <tr key={user.name} className="border-b hover:bg-gray-50">
                             <td className="py-3 px-4">
                               <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
@@ -358,19 +386,19 @@ export default function AnalyticsPage() {
                               </span>
                             </td>
                             <td className="py-3 px-4 font-medium">{user.name}</td>
-                            <td className="py-3 px-4 text-right">{user.totalCalls}</td>
-                            <td className="py-3 px-4 text-right">{user.connectedCalls}</td>
-                            <td className="py-3 px-4 text-right">
+                            <td className={`py-3 px-4 text-right ${rankingCategory === 'totalCalls' ? 'bg-blue-50 font-semibold' : ''}`}>{user.totalCalls}</td>
+                            <td className={`py-3 px-4 text-right ${rankingCategory === 'connectedCalls' ? 'bg-blue-50 font-semibold' : ''}`}>{user.connectedCalls}</td>
+                            <td className={`py-3 px-4 text-right ${rankingCategory === 'connectionRate' ? 'bg-blue-50' : ''}`}>
                               <span className={`px-2 py-1 rounded text-xs ${
                                 user.connectionRate >= 50 ? 'bg-green-100 text-green-800' :
                                 user.connectionRate >= 30 ? 'bg-yellow-100 text-yellow-800' :
                                 'bg-red-100 text-red-800'
-                              }`}>
+                              } ${rankingCategory === 'connectionRate' ? 'font-semibold' : ''}`}>
                                 {user.connectionRate}%
                               </span>
                             </td>
-                            <td className="py-3 px-4 text-right">{user.avgDuration}分</td>
-                            <td className="py-3 px-4 text-right">{user.totalDuration}分</td>
+                            <td className={`py-3 px-4 text-right ${rankingCategory === 'avgDuration' ? 'bg-blue-50 font-semibold' : ''}`}>{user.avgDuration}分</td>
+                            <td className={`py-3 px-4 text-right ${rankingCategory === 'totalDuration' ? 'bg-blue-50 font-semibold' : ''}`}>{user.totalDuration}分</td>
                           </tr>
                         ))}
                       </tbody>

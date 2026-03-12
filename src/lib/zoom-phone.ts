@@ -183,6 +183,7 @@ export async function getAllCallLogs(
 
 /**
  * 録音一覧を取得
+ * Scope: phone:read:list_call_recordings:admin
  */
 export async function getRecordings(
   config: ZoomApiConfig,
@@ -203,20 +204,37 @@ export async function getRecordings(
   if (params.page_size) searchParams.set('page_size', String(params.page_size));
   if (params.next_page_token) searchParams.set('next_page_token', params.next_page_token);
 
-  return zoomApiRequest(config, `/phone/recordings?${searchParams}`);
+  // phone:read:list_call_recordings:admin スコープを使用
+  return zoomApiRequest(config, `/phone/call_logs/recordings?${searchParams}`);
 }
 
 /**
  * 録音ファイルをダウンロード
+ * Scope: phone:read:call_recording:admin
  */
 export async function downloadRecording(
   config: ZoomApiConfig,
-  recordingId: string
+  recordingId: string,
+  callLogId?: string
 ): Promise<{ downloadUrl: string; token: string }> {
   const token = await getZoomAccessToken(config);
 
-  // Zoom Phone録音一覧から該当録音を検索
-  // 過去30日間の録音から検索
+  // callLogIdがある場合は直接取得を試みる
+  if (callLogId) {
+    try {
+      const recording = await zoomApiRequest<ZoomRecording>(
+        config,
+        `/phone/call_logs/${callLogId}/recordings/${recordingId}`
+      );
+      if (recording?.download_url) {
+        return { downloadUrl: recording.download_url, token };
+      }
+    } catch {
+      // 直接取得に失敗した場合は一覧から検索
+    }
+  }
+
+  // 録音一覧から該当録音を検索
   const now = new Date();
   const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const fromStr = from.toISOString().split('T')[0];
@@ -224,7 +242,7 @@ export async function downloadRecording(
 
   const recordings = await zoomApiRequest<{ recordings: ZoomRecording[] }>(
     config,
-    `/phone/recordings?from=${fromStr}&to=${toStr}&page_size=300`
+    `/phone/call_logs/recordings?from=${fromStr}&to=${toStr}&page_size=300`
   );
 
   const recording = recordings.recordings?.find(r => r.id === recordingId);

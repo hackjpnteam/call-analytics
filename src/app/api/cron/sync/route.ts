@@ -3,7 +3,7 @@ import { connectDB } from '@/lib/db/mongodb';
 import { Tenant, CallLog, Recording, User } from '@/models';
 import { ZoomApiConfig, getZoomAccessToken } from '@/lib/zoom-phone';
 
-// Vercel Cronの認証用シークレット
+// Vercel Cronの認証用
 const CRON_SECRET = process.env.CRON_SECRET;
 
 function mapResult(zoomResult: string, duration?: number): string {
@@ -57,9 +57,19 @@ async function getUserCallLogs(token: string, userId: string, from: string, to: 
 // Vercel Cronから定期的に呼び出される（5分間隔）
 export async function GET(request: NextRequest) {
   try {
-    // Cron認証チェック（本番環境用）- 開発時はスキップ
+    // Cron認証チェック
+    // Vercelのcronジョブは自動的に認証されるため、以下のいずれかを許可:
+    // 1. Vercelからのcronリクエスト（x-vercel-signature ヘッダー）
+    // 2. 正しいCRON_SECRETを持つリクエスト
+    // 3. 開発環境（CRON_SECRETが未設定またはデフォルト値）
     const authHeader = request.headers.get('authorization');
-    if (CRON_SECRET && CRON_SECRET !== 'your-cron-secret' && authHeader !== `Bearer ${CRON_SECRET}`) {
+    const vercelSignature = request.headers.get('x-vercel-signature');
+    const isVercelCron = !!vercelSignature;
+    const isDevMode = !CRON_SECRET || CRON_SECRET === 'your-cron-secret';
+    const hasValidSecret = authHeader === `Bearer ${CRON_SECRET}`;
+
+    if (!isVercelCron && !isDevMode && !hasValidSecret) {
+      console.log('Cron auth failed:', { isVercelCron, isDevMode, hasValidSecret });
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
