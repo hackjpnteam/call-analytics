@@ -4,6 +4,7 @@ import { connectDB } from '@/lib/db/mongodb';
 import CallLog from '@/models/CallLog';
 import User from '@/models/User';
 import mongoose from 'mongoose';
+import { buildUserRanking, getLiveZoomCalls } from '@/lib/zoom-live-calls';
 
 export async function GET(request: NextRequest) {
   try {
@@ -141,6 +142,21 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Failed to fetch ranking:', error);
-    return NextResponse.json({ error: 'Failed to fetch ranking' }, { status: 500 });
+    try {
+      const { searchParams } = new URL(request.url);
+      const period = searchParams.get('period') || 'daily';
+      const activeUsers = buildUserRanking(await getLiveZoomCalls(period, 10));
+      return NextResponse.json({
+        users: activeUsers,
+        activeUsers,
+        period,
+        totalUsers: activeUsers.length,
+        activeUserCount: activeUsers.length,
+        source: 'zoom',
+      });
+    } catch (zoomError) {
+      console.error('Failed to fetch Zoom ranking:', zoomError);
+      return NextResponse.json({ error: 'Failed to fetch ranking' }, { status: 500 });
+    }
   }
 }

@@ -4,6 +4,40 @@ import { connectDB } from '@/lib/db/mongodb';
 import CallLog from '@/models/CallLog';
 import User from '@/models/User';
 import { getDailyStats, getTotalSummary, getUserRanking, mockCallLogs } from '@/lib/mock-data';
+import { buildDailyStats, buildUserRanking, getLiveZoomCalls, summarizeCalls } from '@/lib/zoom-live-calls';
+
+async function getZoomDashboardStats(period: string) {
+  const calls = await getLiveZoomCalls(period, 10);
+  const summary = summarizeCalls(calls);
+  const userRanking = buildUserRanking(calls).slice(0, 10);
+  const recentCalls = calls.slice(0, 15).map((call) => ({
+    id: call.id,
+    userId: call.userId,
+    userName: call.userName,
+    direction: call.direction,
+    phoneNumber: call.phoneNumber,
+    result: call.result,
+    startTime: call.startTime,
+    duration: call.duration,
+    hasRecording: call.hasRecording,
+  }));
+
+  return {
+    summary,
+    periodSummary: {
+      totalCalls: summary.totalCalls,
+      connectedCalls: summary.connectedCalls,
+      totalDuration: summary.totalDuration,
+      averageDuration: summary.averageDuration,
+    },
+    dailyStats: buildDailyStats(calls, period),
+    recentCalls,
+    userRanking,
+    activeUsers: userRanking.length,
+    totalUsers: userRanking.length,
+    source: 'zoom',
+  };
+}
 
 function getMockDashboardStats(period: string) {
   const summary = getTotalSummary();
@@ -238,6 +272,12 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Failed to fetch dashboard stats:', error);
     const { searchParams } = new URL(request.url);
-    return NextResponse.json(getMockDashboardStats(searchParams.get('period') || 'daily'));
+    const period = searchParams.get('period') || 'daily';
+    try {
+      return NextResponse.json(await getZoomDashboardStats(period));
+    } catch (zoomError) {
+      console.error('Failed to fetch Zoom dashboard stats:', zoomError);
+      return NextResponse.json(getMockDashboardStats(period));
+    }
   }
 }

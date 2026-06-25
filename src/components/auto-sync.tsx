@@ -13,7 +13,7 @@ export function AutoSync({ intervalMinutes = 5, onSync }: AutoSyncProps) {
   useEffect(() => {
     const sync = async () => {
       try {
-        const res = await fetch('/api/cron/sync', { method: 'POST' });
+        const res = await fetch('/api/sync/auto', { method: 'POST' });
         if (res.ok) {
           lastSyncRef.current = new Date();
           console.log(`[AutoSync] Synced at ${lastSyncRef.current.toISOString()}`);
