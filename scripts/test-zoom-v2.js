@@ -2,9 +2,9 @@ const mongoose = require("mongoose");
 require("dotenv").config({ path: ".env.local" });
 
 const config = {
-  accountId: "V2OlXAI5Q16QRMAbCbt_rg",
-  clientId: "b7Ecoz4STiOp2qraH0D5A",
-  clientSecret: "8Px6I3d3l07C2vwa7QvSOKvPzUh5V9wo"
+  accountId: process.env.ZOOM_ACCOUNT_ID,
+  clientId: process.env.ZOOM_CLIENT_ID,
+  clientSecret: process.env.ZOOM_CLIENT_SECRET
 };
 
 async function getToken() {

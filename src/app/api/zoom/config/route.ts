@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/db/mongodb';
 import { Tenant } from '@/models';
+import { getZoomConfigFromEnv } from '@/lib/zoom-config';
 
 // Zoom設定を保存
 export async function POST(request: NextRequest) {
@@ -81,9 +82,17 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Get Zoom config error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'エラー' },
-      { status: 500 }
-    );
+    const envConfig = getZoomConfigFromEnv();
+    if (envConfig) {
+      return NextResponse.json({
+        isConfigured: true,
+        accountId: envConfig.accountId,
+        clientId: envConfig.clientId,
+        clientSecretMasked: '••••••••',
+        source: 'environment',
+      });
+    }
+
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'エラー' }, { status: 500 });
   }
 }

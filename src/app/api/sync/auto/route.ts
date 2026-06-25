@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { connectDB } from '@/lib/db/mongodb';
 import { Tenant, CallLog, User } from '@/models';
 import { getZoomAccessToken, ZoomApiConfig } from '@/lib/zoom-phone';
+import { getZoomConfigFromEnv, getZoomConfigFromTenant } from '@/lib/zoom-config';
 
 // 最後の同期時刻をメモリにキャッシュ（5分間隔で同期）
 const syncCache = new Map<string, number>();
@@ -97,18 +98,25 @@ export async function POST() {
       });
     }
 
-    await connectDB();
+    const envConfig = getZoomConfigFromEnv();
 
-    const tenant = await Tenant.findById(tenantId);
-    if (!tenant?.zoomPhoneConfig?.accountId) {
-      return NextResponse.json({ success: false, message: 'Zoom未設定' });
+    let tenant = null;
+    let users: Array<{ _id: { toString(): string }; zoomUserId?: string }> = [];
+    try {
+      await connectDB();
+      tenant = await Tenant.findById(tenantId);
+      users = await User.find({
+        tenantId: tenant?._id || tenantId,
+        zoomUserId: { $exists: true, $ne: null }
+      }).lean();
+    } catch (error) {
+      console.warn('DB unavailable during Zoom sync, using env config only:', error);
     }
 
-    const config: ZoomApiConfig = {
-      accountId: tenant.zoomPhoneConfig.accountId,
-      clientId: tenant.zoomPhoneConfig.clientId!,
-      clientSecret: tenant.zoomPhoneConfig.clientSecret!,
-    };
+    const config: ZoomApiConfig | null = getZoomConfigFromTenant(tenant) || envConfig;
+    if (!config) {
+      return NextResponse.json({ success: false, message: 'Zoom未設定' });
+    }
 
     // 過去2日間の通話ログを同期
     const now = new Date();
@@ -119,11 +127,6 @@ export async function POST() {
     const token = await getZoomAccessToken(config);
 
     // ZoomユーザーIDからDBユーザーIDへのマップを作成
-    const users = await User.find({
-      tenantId: tenant._id,
-      zoomUserId: { $exists: true, $ne: null }
-    }).lean();
-
     const zoomUserMap = new Map<string, string>();
     for (const user of users) {
       if (user.zoomUserId) {
@@ -133,6 +136,16 @@ export async function POST() {
 
     // アカウント全体の通話ログを取得
     const logs = await getAccountCallLogs(token, fromDate, toDate);
+
+    if (!tenant || users.length === 0) {
+      syncCache.set(tenantId, Date.now());
+      return NextResponse.json({
+        success: true,
+        skipped: false,
+        message: `Zoom API接続成功: ${logs.length}件取得（DB未接続のため保存は未実行）`,
+        stats: { created: 0, updated: 0, skipped: logs.length, total: logs.length },
+      });
+    }
 
     let created = 0;
     let updated = 0;
