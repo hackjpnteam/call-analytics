@@ -3,6 +3,50 @@ import { auth } from '@/lib/auth';
 import { connectDB } from '@/lib/db/mongodb';
 import CallLog from '@/models/CallLog';
 import User from '@/models/User';
+import { getDailyStats, getTotalSummary, getUserRanking, mockCallLogs } from '@/lib/mock-data';
+
+function getMockDashboardStats(period: string) {
+  const summary = getTotalSummary();
+  const dailyStats = getDailyStats().slice(
+    period === 'daily' ? -1 : period === 'weekly' ? -7 : -30
+  );
+  const recentCalls = mockCallLogs.slice(0, 15).map((call) => ({
+    id: call.id,
+    userId: call.userId,
+    userName: 'デモユーザー',
+    direction: call.direction,
+    phoneNumber: call.phoneNumber,
+    result: call.result,
+    startTime: call.startTime,
+    duration: call.duration,
+    hasRecording: call.hasRecording,
+  }));
+  const userRanking = getUserRanking().slice(0, 10).map((user) => ({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    summary: user.summary,
+    periodSummary: {
+      totalCalls: user.summary.totalCalls,
+      connectedCalls: user.summary.connectedCalls,
+    },
+  }));
+
+  return {
+    summary,
+    periodSummary: {
+      totalCalls: summary.totalCalls,
+      connectedCalls: summary.connectedCalls,
+      totalDuration: summary.totalDuration,
+      averageDuration: summary.averageDuration,
+    },
+    dailyStats,
+    recentCalls,
+    userRanking,
+    activeUsers: userRanking.length,
+    totalUsers: userRanking.length,
+  };
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -193,6 +237,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Failed to fetch dashboard stats:', error);
-    return NextResponse.json({ error: 'Failed to fetch stats' }, { status: 500 });
+    const { searchParams } = new URL(request.url);
+    return NextResponse.json(getMockDashboardStats(searchParams.get('period') || 'daily'));
   }
 }

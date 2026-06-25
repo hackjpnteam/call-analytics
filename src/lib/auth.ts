@@ -36,7 +36,7 @@ const DEMO_USERS = [
     id: 'user-1',
     tenantId: '69a94e30bf29e01c468e0951',
     email: 'tomura@hackjpn.com',
-    password: 'hj12042014xm',
+    password: 'hikarutomura',
     name: '戸村光',
     role: 'admin' as UserRole,
   },
