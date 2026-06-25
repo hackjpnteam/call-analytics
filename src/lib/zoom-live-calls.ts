@@ -105,7 +105,7 @@ function mapZoomCall(call: ZoomCallLogItem): LiveCall {
     userEmail: call.owner?.email || call.user_email || '',
     direction,
     phoneNumber,
-    result: mapZoomResultToInternal(String(call.call_result || call.result || '')),
+    result: mapZoomResultToInternal(String(call.call_result || call.result || ''), Number(call.duration || 0)),
     startTime: String(call.start_time || call.date_time || new Date().toISOString()),
     endTime: call.end_time,
     duration: Number(call.duration || 0),

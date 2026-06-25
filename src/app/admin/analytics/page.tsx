@@ -81,7 +81,7 @@ export default function AnalyticsPage() {
 
       setLoading(true);
       try {
-        const res = await fetch('/api/analytics');
+        const res = await fetch(`/api/analytics?period=${period}`);
         if (res.ok) {
           const result = await res.json();
           setData(result);
@@ -94,7 +94,7 @@ export default function AnalyticsPage() {
     };
 
     fetchData();
-  }, [session]);
+  }, [session, period]);
 
   if (status === 'loading' || loading) {
     return <FullPageLoading />;

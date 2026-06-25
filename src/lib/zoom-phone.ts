@@ -293,7 +293,8 @@ export async function testConnection(config: ZoomApiConfig): Promise<boolean> {
  * Zoom通話結果を内部形式に変換
  */
 export function mapZoomResultToInternal(
-  zoomResult: string
+  zoomResult: string,
+  duration = 0
 ): 'connected' | 'no_answer' | 'busy' | 'voicemail' | 'failed' | 'cancelled' {
   const mapping: Record<string, 'connected' | 'no_answer' | 'busy' | 'voicemail' | 'failed' | 'cancelled'> = {
     'answered': 'connected',
@@ -308,7 +309,10 @@ export function mapZoomResultToInternal(
     'abandoned': 'cancelled',
   };
 
-  return mapping[zoomResult.toLowerCase()] || 'failed';
+  const normalized = zoomResult.toLowerCase();
+  if (mapping[normalized]) return mapping[normalized];
+  if (duration > 0) return 'connected';
+  return 'failed';
 }
 
 export type { ZoomCallLog, ZoomRecording, ZoomUser, ZoomApiConfig };

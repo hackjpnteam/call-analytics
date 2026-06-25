@@ -90,7 +90,7 @@ async function getZoomCalls(request: NextRequest) {
       userName: call.owner?.name || 'Zoomユーザー',
       direction: callDirection,
       phoneNumber,
-      result: mapZoomResultToInternal(callResult),
+      result: mapZoomResultToInternal(callResult, Number(call.duration || 0)),
       startTime: String(call.start_time || call.date_time || new Date().toISOString()),
       endTime: call.end_time,
       duration: Number(call.duration || 0),
